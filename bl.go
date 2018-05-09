@@ -73,6 +73,21 @@ type Bl struct {
 	WettbewerbsID   string `json:"wettbewerbsId"`
 	WettbewerbsName string `json:"wettbewerbsName"`
 	Saison          string `json:"saison"`
+
+	Tabelle []Tables
+}
+
+type Tables struct {
+	WettbewerbsID string `json:"wettbewerbsId"`
+	Wettbewerb    string `json:"wettbewerb"`
+	SpieltagsID   string `json:"spieltagsId"`
+	Spieltag      int    `json:"spieltag"`
+	Eintraege     []struct {
+		Platzierung      int    `json:"platzierung"`
+		UnterPlatzierung int    `json:"unterPlatzierung"`
+		Club             string `json:"club"`
+		ClubId           string `json:"clubId"`
+	} `json:"eintraege"`
 }
 
 func NewBl() (*Bl, error) {
@@ -106,35 +121,77 @@ func NewBl() (*Bl, error) {
 			if err != nil {
 				log.Printf("could not renew cache: %v\n", err)
 			}
-			log.Printf("wait 30 s\n")
 		}
 	}()
 	return b, nil
 }
 
 func (b *Bl) RenewCache() error {
+	fmt.Printf("%s: Renew Bundesliga Cache: ", time.Now().Format("02.01.2006 - 15:04:05"))
+	t1 := time.Now()
+
+	// get spieltag details
+
 	r, err := http.NewRequest("GET", fmt.Sprintf("https://api.bundesliga.com/v1/livebox-service/begegnungen/DFL-COM-000001/2017-2018/?spieltag=%s", b.Spieltag), nil)
 	if err != nil {
 		return err
 	}
 
-	r.Header.Set("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linu…) Gecko/20100101 Firefox/59.0")
+	r.Header.Set("User-Agent", "Mozilla/5.0 (X11; Ubuntu; Linux) Gecko/20100101 Firefox/59.0")
 	r.Header.Add("x-dflds-api-key", b.APIKey)
 
 	resp, err := http.DefaultClient.Do(r)
 	if err != nil {
 		return fmt.Errorf("could not perform request on bl api: %v\n", err)
 	}
+	defer resp.Body.Close()
 
-	enc := json.NewDecoder(resp.Body)
+	b.Lock()
+	defer b.Unlock()
+
+	var counter int
+	c := Counter{R: resp.Body, N: &counter}
+
+	enc := json.NewDecoder(c)
 	err = enc.Decode(b)
 	if err != nil {
 		return fmt.Errorf("could not decode json to bl object: %v\n", err)
 	}
 
+	// get tabelle
+	tmp := 0
+	b.Tabelle, tmp, err = getTabelle()
+	if err != nil {
+		return err
+	}
+	counter += tmp
 	b.Date = time.Now()
 
+	took := time.Now().Sub(t1)
+	fmt.Printf("read %d bytes in %.4f s\n", counter, took.Seconds())
+
 	return nil
+}
+
+func getTabelle() ([]Tables, int, error) {
+	r, err := http.Get("https://www.bundesliga.com/data/df/tables.json")
+	if err != nil {
+		return nil, 0, err
+	}
+	defer r.Body.Close()
+
+	var t []Tables
+	counter := 0
+
+	c := Counter{R: r.Body, N: &counter}
+
+	enc := json.NewDecoder(c)
+	err = enc.Decode(&t)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return t, counter, nil
 }
 
 // RefreshMetadata refreshes the apiKey and the current matchday

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -10,15 +11,15 @@ import (
 )
 
 var (
-	listen   string = "localhost:9001"
-	reqError string = `{"error": true, "msg": "%s"}`
 	asaCache *AsA
 	blCache  *Bl
-
-	sleepi time.Duration = 24 * time.Hour
+	sleepi   time.Duration = 24 * time.Hour
 )
 
 func main() {
+	listen := flag.String("listen", "localhost:9001", "ip:port to listen to, default localhost:9001")
+	flag.Parse()
+
 	var err error
 	asaCache, err = NewAsA()
 	if err != nil {
@@ -27,13 +28,13 @@ func main() {
 
 	blCache, err = NewBl()
 	if err != nil {
-		log.Printf("could not initialize asa Cache, wait for next round: %v\n", err)
+		log.Printf("could not initialize bl Cache, wait for next round: %v\n", err)
 	}
 
 	http.HandleFunc("/asa", asa)
 	http.HandleFunc("/bl", bl)
-	log.Printf("listen on http://%s/\n", listen)
-	log.Fatalln(http.ListenAndServe(listen, nil))
+	log.Printf("listen on http://%s/\n", *listen)
+	log.Fatalln(http.ListenAndServe(*listen, nil))
 }
 
 func asa(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +53,14 @@ func bl(w http.ResponseWriter, r *http.Request) {
 	for _, m := range blCache.Begegnung {
 		buf.WriteString(fmt.Sprintf("<p>%s %d - %d %s</p>", m.HeimTeamNameLang, m.HeimTeamTore, m.AuswaertsTeamTore, m.AuswaertsTeamNameLang))
 	}
+
+	// Tabelle
+	buf.WriteString("<br><ul>")
+	for _, c := range blCache.Tabelle[0].Eintraege {
+		buf.WriteString(fmt.Sprintf("<li>%d. %s</li>", c.Platzierung, c.Club))
+	}
+
+	buf.WriteString("</ul>")
 
 	h = strings.Replace(h, "$content$", buf.String(), 1)
 	w.Header().Set("Content-Type", "text/html")

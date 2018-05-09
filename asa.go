@@ -55,14 +55,13 @@ func NewAsA() (*AsA, error) {
 			if err != nil {
 				log.Printf("could not renew cache: %v\n", err)
 			}
-			log.Printf("wait 30 s\n")
 		}
 	}()
 	return a, nil
 }
 
 func (a *AsA) RenewCache() error {
-	fmt.Printf("%s: Renew Cache: ", time.Now().Format("02.01.2006 - 15:04:05"))
+	fmt.Printf("%s: Renew AsA Cache: ", time.Now().Format("02.01.2006 - 15:04:05"))
 
 	t1 := time.Now()
 	resp, err := http.Get("http://altschauerberganzeiger.com/rss")
@@ -86,8 +85,6 @@ func (a *AsA) RenewCache() error {
 	a.Date = time.Now()
 
 	took := time.Now().Sub(t1)
-
-	fmt.Printf("done, read %d bytes in %s\n", cc, took.String())
-
+	fmt.Printf("read %d bytes in %.4f s\n", cc, took.Seconds())
 	return nil
 }
